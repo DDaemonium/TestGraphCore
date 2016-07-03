@@ -67,10 +67,11 @@ int WINAPI WinMain(HINSTANCE hInstance,	//Main windows function
 	Stat_Mesh2 = std::make_unique <StaticMesh>(DXEngein->d3d11Device, DXEngein->d3d11DevCon);
 	light = std::make_unique<Light>(DXEngein->d3d11Device, DXEngein->d3d11DevCon);
 	light2 = std::make_unique<Light>(DXEngein->d3d11Device, DXEngein->d3d11DevCon);
+	//light2->SetShader("PS_AMBIENT_LIGHT");
 	Stat_Mesh2->SetTextureName(L"braynzar.jpg");
-	light2->SetLocation(-1.0f, 1.0f, 0.0f);
-	light2->SetAmbient(0.15f, 0.15f, 0.15f, 1.0f);
-	light2->SetDiffuse(1.0f, 1.0f, 1.0f, 1.0f);
+	//light2->SetLocation(-1.0f, 1.0f, 0.0f);
+	//light2->SetAmbient(0.15f, 0.15f, 0.15f, 1.0f);
+	//light2->SetDiffuse(1.0f, 1.0f, 1.0f, 1.0f);
 	//light2->SetShader("PS_POINT_LIGHT");
 	if (!camera.InitCamera(DXEngein->d3d11Device, DXEngein->d3d11DevCon))	//Initialize our camera
 	{

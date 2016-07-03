@@ -1,24 +1,4 @@
-struct Lightbuf
-{
-	float3 dir;
-	float3 pos;
-	float  range;
-	float3 att;
-	float4 ambient;
-	float4 diffuse;
-};
-
-cbuffer cbPerFrame
-{
-	Lightbuf light;
-	float check;
-};
-
-cbuffer cbPerObject
-{
-	float4x4 WVP;
-	float4x4 World;
-};
+#include "Lights.fx"
 
 Texture2D ObjTexture;
 SamplerState ObjSamplerState;
@@ -26,15 +6,17 @@ SamplerState ObjSamplerState;
 struct VS_OUTPUT
 {
 	float4 Pos : SV_POSITION;
+	float3 PosW : POSITION;
 	float2 TexCoord : TEXCOORD;
-	float4 worldPos : POSITION;
 	float3 normal : NORMAL;
 };
+
+
 
 VS_OUTPUT VS(float4 inPos : POSITION, float2 inTexCoord : TEXCOORD, float3 normal : NORMAL)
 {
 	VS_OUTPUT output;
-
+	output.PosW = mul(inPos, World).xyz;
 	output.Pos = mul(inPos, WVP);
 
 	output.normal = mul(normal, World);
@@ -44,110 +26,37 @@ VS_OUTPUT VS(float4 inPos : POSITION, float2 inTexCoord : TEXCOORD, float3 norma
 	return output;
 }
 
-float4 PS_AMBIENT_LIGHT(VS_OUTPUT input) : SV_TARGET
-{
-	//if (light.check == 0) {
-	float4 diffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
-
-	float3 finalColor;
-
-	finalColor = diffuse * light.ambient;
-	finalColor += saturate(dot(light.dir, input.normal) * light.diffuse * diffuse);
-	/*}
-	else if (light.check == 1) {
-		input.normal = normalize(input.normal);
-
-		float4 diffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
-
-		float3 finalColor = float3(0.0f, 0.0f, 0.0f);
-
-		//Create the vector between light position and pixels position
-		float3 lightToPixelVec = light.pos - input.worldPos;
-
-		//Find the distance between the light pos and pixel pos
-		float d = length(lightToPixelVec);
-
-		//Create the ambient light
-		float3 finalAmbient = diffuse * light.ambient;
-
-		//If pixel is too far, return pixel color with ambient light
-		if (d > light.range)
-			return float4(finalAmbient, diffuse.a);
-
-		//Turn lightToPixelVec into a unit length vector describing
-		//the pixels direction from the lights position
-		lightToPixelVec /= d;
-
-		//Calculate how much light the pixel gets by the angle
-		//in which the light strikes the pixels surface
-		float howMuchLight = dot(lightToPixelVec, input.normal);
-
-		//If light is striking the front side of the pixel
-		if (howMuchLight > 0.0f)
-		{
-			//Add light to the finalColor of the pixel
-			finalColor += howMuchLight * diffuse * light.diffuse;
-
-			//Calculate Light's Falloff factor
-			finalColor /= light.att[0] + (light.att[1] * d) + (light.att[2] * (d*d));
-		}
-
-		//make sure the values are between 1 and 0, and add the ambient
-		finalColor = saturate(finalColor + finalAmbient);
-	}
-	*/
-return float4(finalColor, diffuse.a);
-}
-
-float4 PS_POINT_LIGHT(VS_OUTPUT input) : SV_TARGET
-{
+float4 PS(VS_OUTPUT input) : SV_TARGET{
 	input.normal = normalize(input.normal);
-
-float4 diffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
-
-float3 finalColor = float3(0.0f, 0.0f, 0.0f);
-
-//Create the vector between light position and pixels position
-float3 lightToPixelVec = light.pos - input.worldPos;
-
-//Find the distance between the light pos and pixel pos
-float d = length(lightToPixelVec);
-
-//Create the ambient light
-float3 finalAmbient = diffuse * light.ambient;
-
-//If pixel is too far, return pixel color with ambient light
-if (d > light.range)
-return float4(finalAmbient, diffuse.a);
-
-//Turn lightToPixelVec into a unit length vector describing
-//the pixels direction from the lights position
-lightToPixelVec /= d;
-
-//Calculate how much light the pixel gets by the angle
-//in which the light strikes the pixels surface
-float howMuchLight = dot(lightToPixelVec, input.normal);
-
-//If light is striking the front side of the pixel
-if (howMuchLight > 0.0f)
-{
-	//Add light to the finalColor of the pixel
-	finalColor += howMuchLight * diffuse * light.diffuse;
-
-	//Calculate Light's Falloff factor
-	finalColor /= light.att[0] + (light.att[1] * d) + (light.att[2] * (d*d));
+	float4 mapDiffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
+	float3 toEyeW = normalize(gEyePosW - input.PosW);
+	// Start with a sum of zero.
+	float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float4 diffuse = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float4 spec = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	// Sum the light contribution from each light source.
+	float4 A, D, S;
+	ComputeDirectionalLight(material, gDirLight, input.normal, toEyeW, A, D, S);
+	ambient += A;
+	diffuse += D;
+	spec += S;
+	ComputePointLight(material, gPointLight, input.PosW, input.normal, toEyeW, A, D, S);
+	ambient += A;
+	diffuse += D;
+	spec += S;
+	ComputeSpotLight(material, gSpotLight, input.PosW, input.normal, toEyeW, A, D, S);
+	ambient += A;
+	diffuse += D;
+	spec += S;
+	float4 litColor = mapDiffuse * (ambient + diffuse) + spec;
+	// Common to take alpha from diffuse material.
+	litColor.a = material.Diffuse.a * mapDiffuse.a;
+	return litColor;
 }
 
-//make sure the values are between 1 and 0, and add the ambient
-finalColor = saturate(finalColor + finalAmbient);
-
-//Return Final Color
-return float4(finalColor, diffuse.a);
-}
 
 float4 D2D_PS(VS_OUTPUT input) : SV_TARGET
 {
-	input.normal = normalize(input.normal);
 	float4 diffuse = ObjTexture.Sample(ObjSamplerState, input.TexCoord);
 
 	return diffuse;

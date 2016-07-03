@@ -25,6 +25,15 @@ struct StaticMesh::Vertex    //Overloaded Vertex Structure
 	XMFLOAT3 normal;
 };
 
+struct StaticMesh::Material
+{
+	Material() { ZeroMemory(this, sizeof(this)); }
+	XMFLOAT4 Ambient;
+	XMFLOAT4 Diffuse;
+	XMFLOAT4 Specular; // w = SpecPower
+	XMFLOAT4 Reflect;
+};
+
 
 bool StaticMesh::InitScene()
 {
@@ -44,9 +53,9 @@ bool StaticMesh::InitScene()
 	Vertex v[] =
 	{
 		// Front Face
-		Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f,-1.0f, -1.0f, -1.0f),
-		Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f,-1.0f,  1.0f, -1.0f),
-		Vertex(1.0f,  1.0f, -1.0f, 1.0f, 0.0f, 1.0f,  1.0f, -1.0f),
+		Vertex(-1.0f, -1.0f, -1.0f, 0.0f, 1.0f,-1.0f, -1.0f, -1.0f),//1
+		Vertex(-1.0f,  1.0f, -1.0f, 0.0f, 0.0f,-1.0f,  1.0f, -1.0f),//-1
+		Vertex(1.0f,  1.0f, -1.0f, 1.0f, 0.0f, 1.0f,  1.0f, -1.0f),//0
 		Vertex(1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f),
 
 		// Back Face
@@ -83,11 +92,11 @@ bool StaticMesh::InitScene()
 		// Front Face
 		0,  1,  2,
 		0,  2,  3,
-
+		
 		// Back Face
 		4,  5,  6,
 		4,  6,  7,
-
+		
 		// Top Face
 		8,  9, 10,
 		8, 10, 11,
@@ -184,7 +193,7 @@ bool StaticMesh::InitScene()
 
 	rtbd.BlendEnable = true;
 	rtbd.SrcBlend = D3D11_BLEND_SRC_COLOR;
-	rtbd.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	rtbd.DestBlend = D3D11_BLEND_BLEND_FACTOR;
 	rtbd.BlendOp = D3D11_BLEND_OP_ADD;
 	rtbd.SrcBlendAlpha = D3D11_BLEND_ONE;
 	rtbd.DestBlendAlpha = D3D11_BLEND_ZERO;
@@ -198,8 +207,8 @@ bool StaticMesh::InitScene()
 
 	ZeroMemory(&wfdesc, sizeof(D3D11_RASTERIZER_DESC));
 	wfdesc.FillMode = D3D11_FILL_SOLID;//SOLID for normal
-	wfdesc.CullMode = D3D11_CULL_NONE;//FRONT /BACK скрываем отображение
-	wfdesc.FrontCounterClockwise = true;
+	wfdesc.CullMode = D3D11_CULL_BACK;//FRONT /BACK скрываем отображение
+	wfdesc.FrontCounterClockwise = false;
 	/* ↓ сглаживание ↓ */
 	wfdesc.MultisampleEnable = false;
 	wfdesc.AntialiasedLineEnable = true;
@@ -253,7 +262,7 @@ void StaticMesh::Draw(){
 	//Update Pixel shaders
 	this->d3d11DevCon->VSSetShader(VS, 0, 0);
 	//"fine-tune" the blending equation
-	float blendFactor[] = { 0.f, 0.f, 0.f, 1.0f };
+	float blendFactor[] = { 1.f, 1.f, 1.f, 1.0f };
 
 	//Set the default blend state (no blending) for opaque objects
 	this->d3d11DevCon->OMSetBlendState(0, 0, 0xffffffff);

@@ -1,35 +1,93 @@
 #include "Light.h"
-
-struct Light::Lightbuf
+struct Light::DirectionalLight
 {
-	Lightbuf()
-	{
-		ZeroMemory(this, sizeof(Lightbuf));
-	}
-	XMFLOAT3 dir;
-	float pad1;
-	XMFLOAT3 pos;
-	float range;
-	XMFLOAT3 att;
-	float pad2;
-	XMFLOAT4 ambient;
-	XMFLOAT4 diffuse;
-}light;
+	DirectionalLight() { ZeroMemory(this, sizeof(this)); }
+	XMFLOAT4 Ambient;
+	XMFLOAT4 Diffuse;
+	XMFLOAT4 Specular;
+	XMFLOAT3 Direction;
+	float Pad; // Pad the last float so we can
+}mDirLight;
+
+struct Light::PointLight
+{
+	PointLight() { ZeroMemory(this, sizeof(this)); }
+	XMFLOAT4 Ambient;
+	XMFLOAT4 Diffuse;
+	XMFLOAT4 Specular;
+	// Packed into 4D vector: (Position, Range)
+	XMFLOAT3 Position;
+	float Range;
+	// Packed into 4D vector: (A0, A1, A2, Pad)
+	XMFLOAT3 Att;
+	float Pad; // Pad the last float so we can set an
+}mPointLight;
+
+struct Light::SpotLight
+{
+	SpotLight() { ZeroMemory(this, sizeof(this)); }
+	XMFLOAT4 Ambient;
+	XMFLOAT4 Diffuse;
+	XMFLOAT4 Specular;
+	// Packed into 4D vector: (Position, Range)
+	XMFLOAT3 Position;
+	float Range;
+	// Packed into 4D vector: (Direction,Spot)
+	XMFLOAT3 Direction;
+	float Spot;
+	// Packed into 4D vector: (Att, Pad)
+	XMFLOAT3 Att;
+	float Pad; // Pad the last float so we can set an
+			   // array of lights if we wanted.
+}mSpotLight;
+
+struct Light::Material
+{
+	Material() { ZeroMemory(this, sizeof(this)); }
+	XMFLOAT4 Ambient;
+	XMFLOAT4 Diffuse;
+	XMFLOAT4 Specular; // w = SpecPower
+	XMFLOAT4 Reflect;
+};
 
 struct Light::cbPerFrame
 {
-	Lightbuf  light;
+	Material material;
+	DirectionalLight gDirLight;
+	PointLight gPointLight;
+	SpotLight gSpotLight;
+	XMFLOAT3 gEyePosW;
+	float pad;
 }constbuffPerFrame;
+
 
 Light::Light(ID3D11Device* d3d11Device, ID3D11DeviceContext* d3d11DevCon):d3d11Device(d3d11Device), d3d11DevCon(d3d11DevCon)
 {
-	light.dir = XMFLOAT3(0.f, 0.f, 0.f);//location
-	light.ambient = XMFLOAT4(1.f, 1.f, 1.f, 1.f);//затемнённая часть
-	light.diffuse = XMFLOAT4(0.f, 0.f, 0.f, 1.f);//свет
-	light.pos = XMFLOAT3(0.0f, 0.0f, -1.0f);
-	light.range = 1000.f;
-	light.att = XMFLOAT3(0.0f, 0.2f, 0.0f);
-	//light.check = 0.f;
+	mDirLight.Ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	mDirLight.Diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mDirLight.Specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mDirLight.Direction = XMFLOAT3(0.57735f, -0.57735f, 0.57735f);
+	// Point light--position is changed every frame to animate
+	// in UpdateScene function.
+	mPointLight.Ambient = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
+	mPointLight.Diffuse = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
+	mPointLight.Specular = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
+	mPointLight.Att = XMFLOAT3(0.0f, 0.1f, 0.0f);
+	mPointLight.Range = 25.0f;
+	// Spot light--position and direction changed every frame to
+	// animate in UpdateScene function.
+	mSpotLight.Ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mSpotLight.Diffuse = XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f);
+	mSpotLight.Specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	mSpotLight.Att = XMFLOAT3(1.0f, 0.0f, 0.0f);
+	mSpotLight.Spot = 96.0f;
+	mSpotLight.Range = 10000.0f;
+
+	constbuffPerFrame.gEyePosW = XMFLOAT3(0.0f, 3.0f, -8.0f);
+
+	constbuffPerFrame.material.Ambient = XMFLOAT4(0.48f, 0.77f, 0.46f, 1.0f);
+	constbuffPerFrame.material.Diffuse = XMFLOAT4(0.48f, 0.77f, 0.46f, 1.0f);
+	constbuffPerFrame.material.Specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 16.0f);
 	this->InitLight();
 }
 
@@ -42,11 +100,11 @@ void Light::InitLight() {
 	cbbd.CPUAccessFlags = 0;
 	cbbd.MiscFlags = 0;
 	d3d11Device->CreateBuffer(&cbbd, NULL, &cbPerFrameBuffer);
-	D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS_AMBIENT_LIGHT", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
+	D3DX11CompileFromFile(L"Effects.fx", 0, 0, "PS", "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
 	this->d3d11Device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);
 }
 
-void Light::SetLocation(float x, float y, float z) {
+/*void Light::SetLocation(float x, float y, float z) {
 	light.dir = XMFLOAT3(x, y, z);
 }
 
@@ -74,9 +132,11 @@ void Light::SetShader(const CHAR *func_name) {
 	D3DX11CompileFromFile(L"Effects.fx", 0, 0, func_name, "ps_4_0", 0, 0, 0, &PS_Buffer, 0, 0);
 	this->d3d11Device->CreatePixelShader(PS_Buffer->GetBufferPointer(), PS_Buffer->GetBufferSize(), NULL, &PS);
 }
-
+*/
 void Light::SetLight(){
-	constbuffPerFrame.light = light;
+	constbuffPerFrame.gDirLight = mDirLight;
+	constbuffPerFrame.gPointLight = mPointLight;
+	constbuffPerFrame.gSpotLight = mSpotLight;
 	d3d11DevCon->UpdateSubresource(cbPerFrameBuffer, 0, NULL, &constbuffPerFrame, 0, 0);
 	d3d11DevCon->PSSetConstantBuffers(0, 1, &cbPerFrameBuffer);
 	this->d3d11DevCon->PSSetShader(PS, 0, 0);

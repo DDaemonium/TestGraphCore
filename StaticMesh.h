@@ -38,7 +38,7 @@ private:
 	float rotangle;
 	std::vector<Vertex> vertices;
 	LPCTSTR texture_name;
-
+	struct Material;
 public:
 	explicit StaticMesh(ID3D11Device* d3d11Device, ID3D11DeviceContext* d3d11DevCon);
 	bool InitScene();
